@@ -3,9 +3,9 @@
 
 This project is licensed under the GNU General Public License v3.0 only (GPL-3.0-only); see [LICENSE](LICENSE). It is provided without warranty. See the license for the complete terms.
 
-# Portfolio Analyser
+# Gringotts - A Portfolio Analyser
 
-Local-first portfolio statement analyser for configurable CSV broker exports.
+Local-first portfolio statement analyser for configurable CSV broker exports. Safe & secure as the Gringotts Bank from the Harry Potter series.
 
 ![Overview](images/Overview-page.png)
 ![Analytics & Insights](images/Insights-Analytics.png)
