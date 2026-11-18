@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (C) Arun Sriraman
 # SPDX-License-Identifier: GPL-3.0-only
 import sqlite3
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -150,10 +150,13 @@ def test_concentration_aggregates_lots_and_accounts_and_includes_cash(configured
 
 def test_review_inbox_and_snapshot_comparison_are_explainable_and_non_destructive(configured_conn):
     conn = configured_conn
+    latest_snapshot = date.today()
+    prior_snapost = latest_snapshot - timedelta(days=31)
+    staggered_snapshot = latest_snapshot - timedelta(days=17)
     broker_id = conn.execute("SELECT id FROM brokers WHERE name = 'Fidelity'").fetchone()["id"]
     conn.execute("INSERT INTO accounts (broker_id, account_number_enc, account_mask, account_fingerprint) VALUES (?, 'enc', '****1234', 'comparison-account')", (broker_id,))
     account_id = conn.execute("SELECT id FROM accounts WHERE account_fingerprint = 'comparison-account'").fetchone()["id"]
-    conn.execute("INSERT INTO statement_imports (broker_id, account_id, statement_date, row_count, fingerprint, status, detected_columns, errors_json) VALUES (?, ?, '2026-08-01', 6, 'comparison-import', 'imported', '[]', '[]')", (broker_id, account_id))
+    conn.execute("INSERT INTO statement_imports (broker_id, account_id, statement_date, row_count, fingerprint, status, detected_columns, errors_json) VALUES (?, ?, ?, 6, 'comparison-import', 'imported', '[]', '[]')", (broker_id, account_id, latest_snapshot.isoformat()))
     import_id = conn.execute("SELECT id FROM statement_imports WHERE fingerprint = 'comparison-import'").fetchone()["id"]
     for symbol, name, kind, category in [("AAPL", "Apple", "Stock", "Large Cap"), (None, "Cash", "Cash", "Cash"), ("MSFT", "Microsoft", "Stock", "Large Cap"), ("GOOG", "Alphabet", "Stock", "Large Cap")]:
         conn.execute("INSERT INTO securities (symbol, name, security_type, allocation_category, exchange, investment_country) VALUES (?, ?, ?, ?, 'NASDAQ', 'United States')", (symbol, name, kind, category))
@@ -161,12 +164,12 @@ def test_review_inbox_and_snapshot_comparison_are_explainable_and_non_destructiv
     conn.execute("INSERT INTO accounts (broker_id, account_number_enc, account_mask, account_fingerprint) VALUES (?, 'enc2', '****5678', 'staggered-account')", (broker_id,))
     staggered_account_id = conn.execute("SELECT id FROM accounts WHERE account_fingerprint = 'staggered-account'").fetchone()["id"]
     rows = [
-        ("2026-07-01", ids["Apple"], 5, 500), ("2026-07-01", ids["Cash"], 100, 100),
-        ("2026-08-01", ids["Apple"], 5, 600), ("2026-08-01", ids["Cash"], 400, 400),
-        ("2026-08-01", ids["Microsoft"], 1, 100),
+        (prior_snapost.isoformat(), ids["Apple"], 5, 500), (prior_snapost.isoformat(), ids["Cash"], 100, 100),
+        (latest_snapshot.isoformat(), ids["Apple"], 5, 600), (latest_snapshot.isoformat(), ids["Cash"], 400, 400),
+        (latest_snapshot.isoformat(), ids["Microsoft"], 1, 100),
     ]
     conn.executemany("INSERT INTO positions (import_id, account_id, security_id, snapshot_date, units, total_fmv, currency) VALUES (?, ?, ?, ?, ?, ?, 'USD')", [(import_id, account_id, security_id, snapshot_date, units, value) for snapshot_date, security_id, units, value in rows])
-    conn.execute("INSERT INTO positions (import_id, account_id, security_id, snapshot_date, units, total_fmv, currency) VALUES (?, ?, ?, '2026-07-15', 2, 200, 'USD')", (import_id, staggered_account_id, ids["Alphabet"]))
+    conn.execute("INSERT INTO positions (import_id, account_id, security_id, snapshot_date, units, total_fmv, currency) VALUES (?, ?, ?, ?, 2, 200, 'USD')", (import_id, staggered_account_id, ids["Alphabet"], staggered_snapshot.isoformat()))
     before = conn.execute("SELECT COUNT(*) count FROM positions").fetchone()["count"]
 
     result = insights(conn)
